@@ -5,13 +5,13 @@
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title></title>
-      <link href="css/style.css" rel="stylesheet" />
 
       <script
         src="https://unpkg.com/htmx.org@1.9.11"
         integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0"
         crossorigin="anonymous"
       ></script>
+      <link href="css/index.css" rel="stylesheet" />
     </head>
     <body>
       {{ template "createcontact" .Form }}
@@ -64,7 +64,36 @@
 {{ end }}
 
 {{ block "contact" . }}
-  <div>Name: <span>{{ .Name }}</span> Email: <span>{{ .Email }}</span></div>
+  <div class="contact" id="contact-{{ .Id }}" style="display: flex">
+    <div
+      hx-indicator="#ci-{{ .Id }}"
+      hx-target="#contact-{{ .Id }}"
+      hx-swap="outerHTML swap:500ms"
+      hx-delete="/contacts/{{ .Id }}"
+      style="width: 2rem; cursor: pointer"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+      >
+        <path
+          d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+        />
+        <path d="M0 0h24v24H0z" fill="none" />
+      </svg>
+    </div>
+    Name: <span>{{ .Name }}</span> Email: <span>{{ .Email }}</span>
+
+    <div id="ci-{{ .Id }}" class="htmx-indicator">
+      <img
+        src="images/bars.svg"
+        alt="loading"
+        style="width: 1rem; margin-left: 1rem"
+      />
+    </div>
+  </div>
 {{ end }}
 
 {{ block "oob-contact" . }}
