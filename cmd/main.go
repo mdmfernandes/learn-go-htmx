@@ -1,13 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"io"
+	"log"
+	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 // HTML Templates
@@ -16,10 +16,11 @@ type Templates struct {
 }
 
 // Render renders a template
-func (t *Templates) Render(w io.Writer, name string, data any, c echo.Context) error {
+func (t *Templates) Render(w io.Writer, name string, data any) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 
+// newTemplate creates an HTML template object
 func newTemplate() *Templates {
 	return &Templates{
 		templates: template.Must(template.ParseGlob("views/*.html")),
@@ -109,78 +110,94 @@ func newPage() Page {
 }
 
 func main() {
-	// Echo instance
-	e := echo.New()
+	// Router
+	router := http.NewServeMux()
 
 	// Middleware
-	e.Use(middleware.Logger())
 
-	// Renderer
-	e.Renderer = newTemplate()
+	// Template
+	template := newTemplate()
 
-	// Serve static pages
-	e.Static("/images", "images")
-	e.Static("/css", "css")
+	// Serve static content
+	fsi := http.FileServer(http.Dir("./images"))
+	router.Handle("/images/", http.StripPrefix("/images/", fsi))
+	fsc := http.FileServer(http.Dir("./css"))
+	router.Handle("/css/", http.StripPrefix("/css/", fsc))
 
 	page := newPage()
 
 	// Routes
-	e.GET("/", func(c echo.Context) error {
-		// Render the "index" block
-		return c.Render(200, "index", page)
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		template.Render(w, "index", page)
 	})
-	e.POST("/contacts", contactsPostHandler(page))
-	e.DELETE("/contacts/:id", contactsDeleteHandler(page))
+	router.HandleFunc("POST /contacts", contactsPostHandler(template, &page))
+	router.HandleFunc("DELETE /contacts/{id}", contactsDeleteHandler(&page))
 
-	// Start server
-	e.Logger.Fatal(e.Start(":1337"))
+	// Server
+	server := http.Server{
+		Addr:    ":1337",
+		Handler: logging(router),
+	}
+
+	fmt.Println("Server is running on port :1337")
+	log.Fatal(server.ListenAndServe())
 }
 
 // Handler: POST /contacts
-func contactsPostHandler(page Page) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		name := c.FormValue("name")
-		email := c.FormValue("email")
+func contactsPostHandler(template *Templates, page *Page) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.FormValue("name")
+		email := r.FormValue("email")
 
 		if page.Data.hasEmail(email) {
 			formData := newFormData()
 			formData.Values["name"] = name
 			formData.Values["email"] = email
 			formData.Errors["email"] = "Email already exists"
-			return c.Render(422, "createcontact", formData)
+
+			// We need to write	the header before rendering the template
+			// Otherwise, the status code will be 200 OK
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			template.Render(w, "createcontact", formData)
+			return
 		}
 
 		contact := newContact(name, email)
 		page.Data.Contacts = append(page.Data.Contacts, contact)
 
+		w.WriteHeader(http.StatusCreated)
 		// Render a form
-		c.Render(200, "createcontact", newFormData())
+		template.Render(w, "createcontac", newFormData())
 		// Render the "oob-contact" block (so we just send the contact that is created)
 		// The less data the server sends, the better
-		return c.Render(200, "oob-contact", contact)
+		template.Render(w, "oob-contact", contact)
 	}
 }
 
 // Handler: DELETE /contacts/:id
-func contactsDeleteHandler(page Page) echo.HandlerFunc {
-	return func(c echo.Context) error {
+func contactsDeleteHandler(page *Page) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		// Simulate a slow server
 		time.Sleep(1 * time.Second)
-		idStr := c.Param("id")
+		idStr := r.PathValue("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
-			return c.String(400, "Invalid ID")
+			w.WriteHeader(400)
+			w.Write([]byte("Invalid ID"))
+			return
 		}
 
 		index := page.Data.indexOf(id)
 		if index == -1 {
-			return c.String(404, "Contact not found")
+			w.WriteHeader(404)
+			w.Write([]byte("Contact not found"))
+			return
 		}
 
 		// Delete the contact from the list
 		// This is a simple way to delete an element from a slice
 		page.Data.Contacts = append(page.Data.Contacts[:index], page.Data.Contacts[index+1:]...)
 
-		return c.NoContent(200)
+		w.WriteHeader(http.StatusOK)
 	}
 }
