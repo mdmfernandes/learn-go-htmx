@@ -14,13 +14,61 @@
       ></script>
     </head>
     <body>
-      <div id="count">{{ template "count" . }}</div>
-      <button hx-target="#count" hx-post="/count">Count</button>
+      {{ template "createcontact" .Form }}
+      <hr />
+      {{ template "contacts" .Data }}
+      <script>
+        document.addEventListener("DOMContentLoaded", (event) => {
+          document.body.addEventListener("htmx:beforeSwap", (event) => {
+            if (event.detail.xhr.status === 422) {
+              // Allow 422 response to swap as we are using this as a signal
+              // that the form was submitted with bad data and want to
+              // re-render with the errors.
+              event.detail.shouldSwap = true;
+              event.detail.isError = false;
+            }
+          });
+        });
+      </script>
     </body>
   </html>
 {{ end }}
 
-{{ block "count" . }}
-  Count
-  {{ .Count }}
+{{ block "createcontact" . }}
+  <form hx-swap="outerHTML" hx-post="/contacts">
+    name:
+    <input
+      {{ if .Values.name }}value="{{ .Values.name }}"{{ end }}
+      type="text"
+      name="name"
+    />
+    email:
+    <input
+      {{ if .Values.email }}value="{{ .Values.email }}"{{ end }}
+      type="email"
+      name="email"
+    />
+    {{ if .Errors.email }}
+      <div style="color: red">{{ .Errors.email }}</div>
+    {{ end }}
+    <button type="submit">Create Contact</button>
+  </form>
+{{ end }}
+
+{{ block "contacts" . }}
+  <div id="contacts" style="display: flex; flex-direction: column">
+    {{ range .Contacts }}
+      {{ template "contact" . }}
+    {{ end }}
+  </div>
+{{ end }}
+
+{{ block "contact" . }}
+  <div>Name: <span>{{ .Name }}</span> Email: <span>{{ .Email }}</span></div>
+{{ end }}
+
+{{ block "oob-contact" . }}
+  <div id="contacts" hx-swap-oob="afterbegin">
+    {{ template "contact" . }}
+  </div>
 {{ end }}
