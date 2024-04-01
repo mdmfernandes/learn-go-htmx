@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -18,17 +19,17 @@ func (w *wrappedWriter) WriteHeader(statusCode int) {
 }
 
 // Logging is a middleware that logs a request
-func logging(next http.Handler) http.Handler {
+func logging(next http.Handler, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		// I need a wrapper to capture the response (e.g. to extract the status code)
-		// StatusOK is the default status code
-		wrapped := &wrappedWriter{w, http.StatusOK}
+		// StatusOK is the default status code sent by the server
+		wrapped := &wrappedWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(wrapped, r)
 
-		log.Println(wrapped.statusCode, r.Method, r.URL.Path, time.Since(start))
+		log.Info("request", "status", strconv.Itoa(wrapped.statusCode), "method", r.Method, "path", r.URL.Path, "time", time.Since(start))
 
 	})
 }

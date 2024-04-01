@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"html/template"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 )
@@ -124,7 +124,9 @@ func main() {
 	fsc := http.FileServer(http.Dir("./css"))
 	router.Handle("/css/", http.StripPrefix("/css/", fsc))
 
+	// Components
 	page := newPage()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Routes
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -136,11 +138,17 @@ func main() {
 	// Server
 	server := http.Server{
 		Addr:    ":1337",
-		Handler: logging(router),
+		Handler: logging(router, logger),
+		// Use our logger to log errors from the HTTP server. We can do this because our
+		// logger implements the io.Write interface. Any logs generated here will be shown
+		// as an ERROR log.
+		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
-	fmt.Println("Server is running on port :1337")
-	log.Fatal(server.ListenAndServe())
+	logger.Info("Server is running on port :1337")
+	err := server.ListenAndServe()
+	logger.Error(err.Error())
+	os.Exit(1)
 }
 
 // Handler: POST /contacts
@@ -167,7 +175,7 @@ func contactsPostHandler(template *Templates, page *Page) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusCreated)
 		// Render a form
-		template.Render(w, "createcontac", newFormData())
+		template.Render(w, "createcontact", newFormData())
 		// Render the "oob-contact" block (so we just send the contact that is created)
 		// The less data the server sends, the better
 		template.Render(w, "oob-contact", contact)
